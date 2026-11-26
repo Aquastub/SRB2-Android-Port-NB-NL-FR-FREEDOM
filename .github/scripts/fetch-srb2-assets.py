@@ -16,22 +16,18 @@ from pathlib import Path, PurePosixPath
 ROOT = Path(__file__).resolve().parents[2]
 VERSION_HEADER = ROOT / "src" / "version.h"
 ASSET_DIRECTORY = ROOT / "android" / "app" / "src" / "main" / "assets"
-REQUIRED_ASSETS = (
-    "srb2.pk3",
-    "zones.pk3",
-    "characters.pk3",
-    "music.pk3",
-)
-
-OPTIONAL_ASSETS = (
-    "models.dat",
-)
+REQUIRED_ASSETS = ("srb2.pk3", "zones.pk3", "characters.pk3", "music.pk3")
+OPTIONAL_ASSETS = ("models.dat",)
 CHUNK_SIZE = 1024 * 1024
 
 
 def read_game_version() -> str:
     text = VERSION_HEADER.read_text(encoding="utf-8")
-    match = re.search(r'^\s*#define\s+SRB2VERSION\s+"([0-9]+(?:\.[0-9]+)+)"', text, re.MULTILINE)
+    match = re.search(
+        r'^\s*#define\s+SRB2VERSION\s+"([0-9]+(?:\.[0-9]+)+)"',
+        text,
+        re.MULTILINE,
+    )
     if not match:
         raise RuntimeError(f"Could not read SRB2VERSION from {VERSION_HEADER}")
     return match.group(1)
@@ -46,7 +42,6 @@ def download_archive(version: str, destination: Path) -> None:
         url,
         headers={"User-Agent": "SRB2-Android-GitHub-Actions", "Accept": "application/octet-stream"},
     )
-
     print(f"Downloading official SRB2 {version} game data:")
     print(url)
     try:
@@ -63,28 +58,31 @@ def download_archive(version: str, destination: Path) -> None:
         ) from error
     except urllib.error.URLError as error:
         raise RuntimeError(f"Could not download official SRB2 game data: {error.reason}") from error
-
     if not destination.is_file() or destination.stat().st_size == 0:
         raise RuntimeError("The official game-data download was empty.")
 
 
 def extract_assets(archive_path: Path) -> None:
     ASSET_DIRECTORY.mkdir(parents=True, exist_ok=True)
-    # Avoid retaining stale optional assets if the upstream archive changes.
+    # Remove stale staged files before extracting the current release.
     for asset_name in REQUIRED_ASSETS + OPTIONAL_ASSETS:
         (ASSET_DIRECTORY / asset_name).unlink(missing_ok=True)
+
     try:
         with zipfile.ZipFile(archive_path) as archive:
-            names = REQUIRED_ASSETS + OPTIONAL_ASSETS
             staged = []
-            for asset_name in names:
+            for asset_name in REQUIRED_ASSETS + OPTIONAL_ASSETS:
                 matches = [
-                    info for info in archive.infolist()
-                    if not info.is_dir() and PurePosixPath(info.filename).name.lower() == asset_name.lower()
+                    info
+                    for info in archive.infolist()
+                    if not info.is_dir()
+                    and PurePosixPath(info.filename).name.lower() == asset_name.lower()
                 ]
                 if not matches:
                     if asset_name in REQUIRED_ASSETS:
-                        raise RuntimeError(f"Official SRB2 archive is missing required file: {asset_name}")
+                        raise RuntimeError(
+                            f"Official SRB2 archive is missing required file: {asset_name}"
+                        )
                     print(f"Optional upstream asset not present: {asset_name}")
                     continue
                 if len(matches) != 1:
@@ -99,9 +97,10 @@ def extract_assets(archive_path: Path) -> None:
                 if destination.stat().st_size != info.file_size or destination.stat().st_size == 0:
                     raise RuntimeError(f"Extracted {asset_name} is incomplete or empty.")
                 staged.append(asset_name)
-
     except zipfile.BadZipFile as error:
-        raise RuntimeError("The downloaded SRB2 game-data file is not a valid ZIP archive.") from error
+        raise RuntimeError(
+            "The downloaded SRB2 game-data file is not a valid ZIP archive."
+        ) from error
 
     print("Staged Android game data:")
     for asset_name in staged:
@@ -117,7 +116,6 @@ def main() -> int:
         help="Use an already-downloaded Full.zip instead of downloading the official release.",
     )
     args = parser.parse_args()
-
     try:
         version = read_game_version()
         if args.archive:

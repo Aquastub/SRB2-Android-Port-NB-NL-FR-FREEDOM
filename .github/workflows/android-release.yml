@@ -51,7 +51,7 @@ jobs:
           java-version: '21'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4.0.4
 
       - name: Install Android SDK packages
         run: |
@@ -80,7 +80,6 @@ jobs:
               exit 1
             fi
           done
-
           KEYSTORE_PATH="$RUNNER_TEMP/srb2-release.jks"
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
           test -s "$KEYSTORE_PATH"
@@ -100,21 +99,18 @@ jobs:
           set -euo pipefail
           APK_SIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
           mkdir -p release-apks
-
           while IFS= read -r -d '' apk_path; do
             relative_path="${apk_path#android/app/build/outputs/apk/}"
             release_name="${relative_path//\//-}"
             "$APK_SIGNER" verify --verbose --print-certs "$apk_path"
             cp "$apk_path" "release-apks/$release_name"
           done < <(find android/app/build/outputs/apk -type f -name '*.apk' -print0)
-
           apk_count=$(find release-apks -maxdepth 1 -type f -name '*.apk' | wc -l)
           if [ "$apk_count" -ne 2 ]; then
             echo "Expected exactly two release APKs, found $apk_count." >&2
             find release-apks -maxdepth 1 -type f -print >&2
             exit 1
           fi
-
           (cd release-apks && sha256sum ./*.apk > SHA256SUMS.txt)
 
       - name: Publish GitHub Release
