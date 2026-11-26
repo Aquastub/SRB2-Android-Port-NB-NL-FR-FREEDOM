@@ -1,0 +1,135 @@
+name: Android Release APKs
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Git tag to publish (for example, v2.2.15)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark this GitHub Release as a prerelease'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign, and publish APKs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment:
+      name: release
+    env:
+      SRB2_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      SRB2_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      SRB2_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch matching official SRB2 game assets
+        run: python3 .github/scripts/fetch-srb2-assets.py
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager \
+            'platform-tools' \
+            'platforms;android-36' \
+            'build-tools;35.0.0' \
+            'ndk;28.0.12433566'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare release signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          for secret_name in \
+            ANDROID_KEYSTORE_BASE64 \
+            SRB2_RELEASE_STORE_PASSWORD \
+            SRB2_RELEASE_KEY_ALIAS \
+            SRB2_RELEASE_KEY_PASSWORD; do
+            if [ -z "${!secret_name:-}" ]; then
+              echo "Missing required GitHub Actions secret for ${secret_name}." >&2
+              exit 1
+            fi
+          done
+
+          KEYSTORE_PATH="$RUNNER_TEMP/srb2-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          test -s "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          echo "SRB2_RELEASE_STORE_FILE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      - name: Build signed release APKs (both asset flavors)
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace \
+            assembleGameFullRelease \
+            assembleGameNoAssetsRelease
+
+      - name: Verify signatures and prepare release files
+        run: |
+          set -euo pipefail
+          APK_SIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          mkdir -p release-apks
+
+          while IFS= read -r -d '' apk_path; do
+            relative_path="${apk_path#android/app/build/outputs/apk/}"
+            release_name="${relative_path//\//-}"
+            "$APK_SIGNER" verify --verbose --print-certs "$apk_path"
+            cp "$apk_path" "release-apks/$release_name"
+          done < <(find android/app/build/outputs/apk -type f -name '*.apk' -print0)
+
+          apk_count=$(find release-apks -maxdepth 1 -type f -name '*.apk' | wc -l)
+          if [ "$apk_count" -ne 2 ]; then
+            echo "Expected exactly two release APKs, found $apk_count." >&2
+            find release-apks -maxdepth 1 -type f -print >&2
+            exit 1
+          fi
+
+          (cd release-apks && sha256sum ./*.apk > SHA256SUMS.txt)
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: SRB2 Android ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
+          fail_on_unmatched_files: true
+          files: |
+            release-apks/*.apk
+            release-apks/SHA256SUMS.txt
+
+      - name: Remove temporary signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/srb2-release.jks"

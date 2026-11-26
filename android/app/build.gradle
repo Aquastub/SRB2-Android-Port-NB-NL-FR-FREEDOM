@@ -5,8 +5,32 @@ plugins {
 def buildAsLibrary = project.hasProperty('BUILD_AS_LIBRARY');
 def buildAsApplication = !buildAsLibrary
 
+
+def releaseSigning = [
+    storeFile: System.getenv('SRB2_RELEASE_STORE_FILE'),
+    storePassword: System.getenv('SRB2_RELEASE_STORE_PASSWORD'),
+    keyAlias: System.getenv('SRB2_RELEASE_KEY_ALIAS'),
+    keyPassword: System.getenv('SRB2_RELEASE_KEY_PASSWORD')
+]
+def hasAnyReleaseSigningValue = releaseSigning.values().any { it != null && !it.trim().isEmpty() }
+def hasCompleteReleaseSigning = releaseSigning.values().every { it != null && !it.trim().isEmpty() }
+
+if (hasAnyReleaseSigningValue && !hasCompleteReleaseSigning) {
+    throw new GradleException('Release signing is partially configured. Set SRB2_RELEASE_STORE_FILE, SRB2_RELEASE_STORE_PASSWORD, SRB2_RELEASE_KEY_ALIAS, and SRB2_RELEASE_KEY_PASSWORD together.')
+}
+
 android {
     namespace "org.stjr.srb2"
+    signingConfigs {
+        if (hasCompleteReleaseSigning) {
+            release {
+                storeFile file(releaseSigning.storeFile)
+                storePassword releaseSigning.storePassword
+                keyAlias releaseSigning.keyAlias
+                keyPassword releaseSigning.keyPassword
+            }
+        }
+    }
     compileSdkVersion 36
     defaultConfig {
         if (buildAsApplication) {
@@ -43,7 +67,8 @@ android {
                             'zones.pk3',
                             'characters.pk3',
                             'patch.pk3',
-                            'music.pk3']
+                            'music.pk3',
+                            'models.dat']
                     ))
                 }
             }
@@ -73,7 +98,7 @@ android {
                     arguments "BUILD_TYPE=release"
                 }
             }
-            signingConfig signingConfigs.debug
+            signingConfig = hasCompleteReleaseSigning ? signingConfigs.release : signingConfigs.debug
         }
         debug {
             externalNativeBuild {
@@ -102,7 +127,7 @@ android {
     lint {
         abortOnError false
     }
-    ndkVersion '28.0.12433566 rc1'
+    ndkVersion '28.0.12433566'
     preBuild.dependsOn generateCompTime
 
     if (!project.hasProperty('EXCLUDE_NATIVE_LIBS')) {

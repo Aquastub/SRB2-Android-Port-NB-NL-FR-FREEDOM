@@ -22,3 +22,4 @@ This folder contains the files that will be packaged with the built APK.
 
     * music.pk3
     * patch_music.pk3
+    * models.dat (optional hardware-renderer model definitions)

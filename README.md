@@ -34,6 +34,9 @@ PC instructions should work just fine with this repo!
 ### *Android*
 > see [TO-DO: Wiki with compilation instructions.](https://www.google.com)
 
+### *GitHub Actions*
+See [`.github/ANDROID_BUILDS.md`](.github/ANDROID_BUILDS.md) for automated debug builds, signed APK releases, and the required release-environment secrets.
+
 ## *Disclaimer*
 We are in no way affiliated with Sonic Team Jr. Lactozilla, SEGA, or Sonic Team, and don't claim ownership of anything here. This port was made out of love for the game.
 
