@@ -16,8 +16,8 @@ from pathlib import Path, PurePosixPath
 ROOT = Path(__file__).resolve().parents[2]
 VERSION_HEADER = ROOT / "src" / "version.h"
 ASSET_DIRECTORY = ROOT / "android" / "app" / "src" / "main" / "assets"
-REQUIRED_ASSETS = ("srb2.pk3", "zones.pk3", "characters.pk3", "patch.pk3")
-OPTIONAL_ASSETS = ("music.pk3", "models.dat")
+REQUIRED_ASSETS = ("srb2.pk3", "zones.pk3", "characters.pk3", "music.pk3")
+OPTIONAL_ASSETS = ("models.dat")
 CHUNK_SIZE = 1024 * 1024
 
 
