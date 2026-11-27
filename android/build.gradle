@@ -2,8 +2,14 @@
 
 buildscript {
     repositories {
-//        jcenter()
         google()
+
+        // Use Google's hosted Maven Central mirror first to avoid Maven Central 429 rate limits.
+        maven {
+            url 'https://maven-central.storage-download.googleapis.com/maven2/'
+        }
+
+        // Keep Maven Central as a fallback.
         mavenCentral()
     }
     dependencies {
